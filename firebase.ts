@@ -6,12 +6,13 @@ import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyC8XdZraD5eQj-PqajGGpYqThmdhITTuLs",
-  authDomain: "spendwise-75b66.firebaseapp.com",
-  projectId: "spendwise-75b66",
-  storageBucket: "spendwise-75b66.appspot.com", // fix small typo
-  messagingSenderId: "690796736901",
-  appId: "1:690796736901:web:ae28bdd05212a78b7ad4ec"
+  apiKey: "AIzaSyDhklR1gswOPOkXHoiIaP2zX08EMM6BVys",
+  authDomain: "book-nest-b5a41.firebaseapp.com",
+  projectId: "book-nest-b5a41",
+  storageBucket: "book-nest-b5a41.firebasestorage.app",
+  messagingSenderId: "959204758249",
+  appId: "1:959204758249:web:39151d671577e8a84c5678",
+  measurementId: "G-RVVXY0643W"
 };
 
 // Initialize Firebase
