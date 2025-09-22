@@ -1,69 +1,16 @@
 
+
 import { router } from "expo-router";
 import React, { useEffect, useState} from "react";
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
-
-// Mock services and types for demo
-const BookService = {
-  getBooksByUser: async (userId: any) => {
-    // Mock implementation with sample data
-    return [
-      {
-        id: "1",
-        title: "The Midnight Library",
-        author: "Matt Haig",
-        genre: "Fiction",
-        readingStatus: "currently-reading" as ReadingStatus,
-        rating: 4,
-        review: "A thought-provoking exploration of life's infinite possibilities",
-        tags: ["philosophical", "inspiring", "emotional"],
-        description: "A philosophical novel about life choices"
-      },
-      {
-        id: "2", 
-        title: "Atomic Habits",
-        author: "James Clear",
-        genre: "Self-Help",
-        readingStatus: "finished" as ReadingStatus,
-        rating: 5,
-        review: "Life-changing approach to building habits",
-        tags: ["life-changing", "educational", "practical"],
-        description: "Building good habits and breaking bad ones"
-      },
-      {
-        id: "3",
-        title: "Dune",
-        author: "Frank Herbert", 
-        genre: "Sci-Fi",
-        readingStatus: "want-to-read" as ReadingStatus,
-        rating: 0,
-        tags: [],
-        description: "Epic science fiction saga"
-      }
-    ];
-  },
-
-  updateBook: async (id: any, data: any) => {
-    console.log('Updating book:', id, data);
-    return { id, ...data };
-  },
-  deleteBook: async (id: any) => {
-    console.log('Deleting book:', id);
-    return true;
-  }
-};
-
-const auth = {
-  currentUser: { uid: "demo-user", email: "reader@example.com" }
-};
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Modal, Alert, Image, ActivityIndicator } from 'react-native';
+import { auth } from "@/firebase";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { BookService } from "@/service/bookService"; // Import your real BookService
+import { Book } from "@/types/book"; // Import your Book type
 
 type ReadingStatus = "want-to-read" | "currently-reading" | "finished";
 
-interface EnhancedBook {
-  id: string;
-  title: string;
-  author: string;
-  genre?: string;
+interface EnhancedBook extends Book {
   coverImage?: string;
   description?: string;
   rating?: number;
@@ -81,11 +28,15 @@ const READING_STATUS_OPTIONS = [
 ];
 
 export default function BooksListScreen() {
-  const userId = auth.currentUser?.uid ?? "guest";
+  // Real Firebase Auth State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
   const [books, setBooks] = useState<EnhancedBook[]>([]);
   const [filteredBooks, setFilteredBooks] = useState<EnhancedBook[]>([]);
   const [activeFilter, setActiveFilter] = useState<ReadingStatus | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [loadingBooks, setLoadingBooks] = useState(false);
   
   // Review Modal States
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -93,6 +44,7 @@ export default function BooksListScreen() {
   const [rating, setRating] = useState<number>(0);
   const [review, setReview] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [savingReview, setSavingReview] = useState(false);
 
   const PREDEFINED_TAGS = [
     "inspiring", "boring", "emotional", "funny", "dark", "romantic", 
@@ -100,13 +52,33 @@ export default function BooksListScreen() {
     "thought-provoking", "heartwarming", "intense", "relaxing", "nostalgic"
   ];
 
+  // Listen to authentication state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setIsLoading(false);
+      
+      if (!user) {
+        router.replace("/login");
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
   const loadBooks = async () => {
+    if (!currentUser) return;
+    
     try {
-      const data = await BookService.getBooksByUser(userId);
+      setLoadingBooks(true);
+      const data = await BookService.getBooksByUser(currentUser.uid);
       setBooks(data);
       filterBooks(data, activeFilter, searchQuery);
     } catch (err) {
-      console.error(err);
+      console.error("Error loading books:", err);
+      Alert.alert("Error", "Failed to load books. Please try again.");
+    } finally {
+      setLoadingBooks(false);
     }
   };
 
@@ -133,14 +105,21 @@ export default function BooksListScreen() {
   };
 
   useEffect(() => {
-    loadBooks();
-  }, []);
+    if (currentUser) {
+      loadBooks();
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     filterBooks(books, activeFilter, searchQuery);
   }, [books, activeFilter, searchQuery]);
 
   const handleQuickStatusChange = async (bookId: string, newStatus: ReadingStatus) => {
+    if (!currentUser) {
+      Alert.alert("Error", "Please log in to update books");
+      return;
+    }
+
     try {
       const updateData: any = { readingStatus: newStatus };
       
@@ -151,17 +130,22 @@ export default function BooksListScreen() {
       }
       
       await BookService.updateBook(bookId, updateData);
-      loadBooks();
+      await loadBooks(); // Reload to get updated data
       
       const statusLabel = READING_STATUS_OPTIONS.find(s => s.value === newStatus)?.label || newStatus;
       Alert.alert("Success", `Book marked as ${statusLabel}`);
     } catch (err) {
-      console.error(err);
+      console.error("Error updating book status:", err);
       Alert.alert("Error", "Failed to update status");
     }
   };
 
   const handleDelete = async (id: string, title: string) => {
+    if (!currentUser) {
+      Alert.alert("Error", "Please log in to delete books");
+      return;
+    }
+
     Alert.alert(
       "Delete Book",
       `Are you sure you want to delete "${title}"?`,
@@ -173,9 +157,10 @@ export default function BooksListScreen() {
           onPress: async () => {
             try {
               await BookService.deleteBook(id);
-              loadBooks();
+              await loadBooks();
+              Alert.alert("Success", "Book deleted successfully");
             } catch (err) {
-              console.error(err);
+              console.error("Error deleting book:", err);
               Alert.alert("Error", "Failed to delete book");
             }
           }
@@ -185,6 +170,11 @@ export default function BooksListScreen() {
   };
 
   const openReviewModal = (book: EnhancedBook) => {
+    if (!currentUser) {
+      Alert.alert("Error", "Please log in to write reviews");
+      return;
+    }
+
     setSelectedBookForReview(book);
     setRating(book.rating || 0);
     setReview(book.review || "");
@@ -193,9 +183,10 @@ export default function BooksListScreen() {
   };
 
   const saveReview = async () => {
-    if (!selectedBookForReview) return;
+    if (!selectedBookForReview || !currentUser) return;
     
     try {
+      setSavingReview(true);
       await BookService.updateBook(selectedBookForReview.id!, {
         rating,
         review,
@@ -204,11 +195,13 @@ export default function BooksListScreen() {
       
       setShowReviewModal(false);
       setSelectedBookForReview(null);
-      loadBooks();
+      await loadBooks(); // Reload to show updated review
       Alert.alert("Success", "Your review has been saved successfully");
     } catch (err) {
-      console.error(err);
+      console.error("Error saving review:", err);
       Alert.alert("Error", "Failed to save review");
+    } finally {
+      setSavingReview(false);
     }
   };
 
@@ -262,12 +255,14 @@ export default function BooksListScreen() {
         <View className="mb-3">
           <View className="flex-row">
             {item.coverImage ? (
-              <View className="w-15 h-20 rounded-lg mr-3 bg-purple-100 items-center justify-center">
-                <Text className="text-xl">📚</Text>
-              </View>
+              <Image
+                source={{ uri: item.coverImage }}
+                className="w-18 h-24 rounded-lg mr-3"
+                style={{ resizeMode: 'cover' }}
+              />
             ) : (
-              <View className="w-15 h-20 rounded-lg mr-3 bg-purple-100 items-center justify-center">
-                <Text className="text-xl">📚</Text>
+              <View className="w-18 h-24 rounded-lg mr-3 bg-purple-100 items-center justify-center">
+                <Text className="text-2xl">📚</Text>
               </View>
             )}
             
@@ -299,6 +294,15 @@ export default function BooksListScreen() {
             </View>
           </View>
         </View>
+
+        {/* Description */}
+        {item.description && (
+          <View className="mb-3">
+            <Text className="text-sm text-gray-600 leading-5" numberOfLines={2}>
+              {item.description}
+            </Text>
+          </View>
+        )}
 
         {/* Tags */}
         {item.tags && item.tags.length > 0 && (
@@ -368,21 +372,65 @@ export default function BooksListScreen() {
     );
   };
 
+  // Show loading screen while checking auth state
+  if (isLoading) {
+    return (
+      <View className="flex-1 bg-purple-50 items-center justify-center">
+        <ActivityIndicator size="large" color="#7C3AED" />
+        <Text className="text-xl font-bold text-purple-600 mt-4">Loading...</Text>
+      </View>
+    );
+  }
+
+  // Show message if user is not authenticated
+  if (!currentUser) {
+    return (
+      <View className="flex-1 bg-purple-50 items-center justify-center px-6">
+        <Text className="text-6xl mb-4">🔒</Text>
+        <Text className="text-xl font-bold text-gray-600 mb-2 text-center">
+          Please Log In
+        </Text>
+        <Text className="text-base text-gray-500 text-center mb-6">
+          You need to be logged in to view your book library.
+        </Text>
+        <TouchableOpacity
+          className="bg-purple-600 px-6 py-3 rounded-xl"
+          onPress={() => router.push("/login")}
+        >
+          <Text className="text-white font-bold">Go to Login</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const stats = getBookStats();
 
   return (
     <ScrollView className="flex-1 bg-purple-50">
       <View className="pb-8">
-        {/* Header */}
-        <View className="flex-row justify-between items-center px-5 pt-5 mb-8">
-          <Text className="text-3xl font-bold text-purple-800 pt-7">📖 My Library</Text>
-           <TouchableOpacity
-            className="bg-purple-600 px-4 py-2 rounded-full top-4"
-            onPress={() => router.push("/add-book")} // 👈 navigate
+        {/* Header with user info */}
+        <View className="flex-row justify-between items-center px-5 pt-12 mb-8">
+          <View>
+            <Text className="text-3xl font-bold text-purple-800">📖 My Library</Text>
+            <Text className="text-sm text-purple-600 mt-1">
+              Welcome, {currentUser.email?.split('@')[0]}!
+            </Text>
+          </View>
+          <TouchableOpacity
+            className="bg-purple-600 px-4 py-2 rounded-full"
+            onPress={() => router.push("/add-book")}
           >
             <Text className="text-white font-bold">➕ Add Book</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Loading indicator for books */}
+        {loadingBooks && (
+          <View className="items-center mb-4">
+            <ActivityIndicator size="small" color="#7C3AED" />
+            <Text className="text-purple-600 text-sm mt-2">Loading your books...</Text>
+          </View>
+        )}
 
         {/* Stats Cards */}
         <ScrollView horizontal className="px-5 mb-5" showsHorizontalScrollIndicator={false}>
@@ -484,11 +532,10 @@ export default function BooksListScreen() {
               {!searchQuery && (
                 <TouchableOpacity
                   className="bg-purple-600 px-6 py-3 rounded-3xl"
-                  onPress={() => console.log('Add first book')}
+                  onPress={() => router.push("/add-book")}
                 >
                   <Text className="text-white font-bold">➕ Add Your First Book</Text>
                 </TouchableOpacity>
-           
               )}
             </View>
           ) : (
@@ -557,14 +604,18 @@ export default function BooksListScreen() {
                   <TouchableOpacity
                     className="flex-1 bg-gray-200 py-3 rounded-xl items-center"
                     onPress={() => setShowReviewModal(false)}
+                    disabled={savingReview}
                   >
                     <Text className="text-gray-600 font-bold">Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    className="flex-1 bg-purple-600 py-3 rounded-xl items-center"
+                    className={`flex-1 py-3 rounded-xl items-center ${savingReview ? 'bg-purple-400' : 'bg-purple-600'}`}
                     onPress={saveReview}
+                    disabled={savingReview}
                   >
-                    <Text className="text-white font-bold">Save Review</Text>
+                    <Text className="text-white font-bold">
+                      {savingReview ? "Saving..." : "Save Review"}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>

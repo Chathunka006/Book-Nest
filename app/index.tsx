@@ -1,10 +1,10 @@
-import { useAuth } from '@/context/AuthContext'
-import { useRouter } from 'expo-router'
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native'
 import React, { useEffect } from 'react'
-import { ActivityIndicator, View } from 'react-native'
+import { useRouter } from 'expo-router'
+import { useAuth } from '@/context/AuthContext'
 
 const Index = () => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
+   
   const router = useRouter()
   const {user , loading} = useAuth()
 
