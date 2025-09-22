@@ -1,29 +1,29 @@
 
 
-import React, { useState, useEffect } from 'react';
+import { auth } from '@/firebase';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Alert,
+  changePassword,
+  getCurrentUser,
+  logout,
+  updateUserEmail,
+  updateUserProfile
+} from '@/service/authService';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   Modal,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { VibeService } from '../../service/dailyReadingVibeService';
 import { DailyReadingVibe } from '../../types/vibe';
-import { auth } from '@/firebase';
-import { router } from 'expo-router';
-import { 
-  getCurrentUser, 
-  updateUserProfile, 
-  updateUserEmail, 
-  changePassword,
-  logout 
-} from '@/service/authService';
 
 const { width } = Dimensions.get('window');
 
